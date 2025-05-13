@@ -1,7 +1,7 @@
 use std::{collections::HashMap, time::Duration};
 
-use intrusive::{PinList, PinListNode};
-use minicbor::{Decode, Encode};
+use intrusive::{StorageList, StorageListNode};
+use minicbor::{CborLen, Decode, Encode};
 use mutex::raw_impls::cs::CriticalSectionRawMutex;
 use tokio::time::sleep;
 
@@ -38,18 +38,18 @@ async fn main() {
     }
 }
 
-static GLOBAL_LIST: PinList<CriticalSectionRawMutex> = PinList::new();
+static GLOBAL_LIST: StorageList<CriticalSectionRawMutex> = StorageList::new();
 
 //
 // TASK 1: Has config, but an old version
 //
-#[derive(Debug, Default, Encode, Decode, Clone)]
+#[derive(Debug, Default, Encode, Decode, Clone, CborLen)]
 struct EncabulatorConfigV1 {
     #[n(0)]
     polarity: bool,
 }
 
-#[derive(Debug, Default, Encode, Decode, Clone)]
+#[derive(Debug, Default, Encode, Decode, Clone, CborLen)]
 struct EncabulatorConfigV2 {
     #[n(0)]
     polarity: bool,
@@ -57,14 +57,14 @@ struct EncabulatorConfigV2 {
     spinrate: Option<u32>,
 }
 
-static ENCAB_CONFIG: PinListNode<EncabulatorConfigV2, CriticalSectionRawMutex> =
-    PinListNode::new("encabulator/config");
-async fn task_1(list: &'static PinList<CriticalSectionRawMutex>) {
-    ENCAB_CONFIG.attach(list).await.unwrap();
-    let data: EncabulatorConfigV2 = ENCAB_CONFIG.load();
+static ENCAB_CONFIG: StorageListNode<EncabulatorConfigV2> =
+    StorageListNode::new("encabulator/config");
+async fn task_1(list: &'static StorageList<CriticalSectionRawMutex>) {
+    let config_handle = ENCAB_CONFIG.attach(list).await.unwrap();
+    let data: EncabulatorConfigV2 = config_handle.load();
     println!("T1 Got {data:?}");
     sleep(Duration::from_secs(1)).await;
-    ENCAB_CONFIG.write(&EncabulatorConfigV2 {
+    config_handle.write(&EncabulatorConfigV2 {
         polarity: true,
         spinrate: Some(100),
     });
@@ -73,26 +73,25 @@ async fn task_1(list: &'static PinList<CriticalSectionRawMutex>) {
 //
 // TASK 2: Has config, current version
 //
-#[derive(Debug, Default, Encode, Decode, Clone)]
+#[derive(Debug, Default, Encode, Decode, Clone, CborLen)]
 struct GrammeterConfig {
     #[n(0)]
     radiation: f32,
 }
 
-static GRAMM_CONFIG: PinListNode<GrammeterConfig, CriticalSectionRawMutex> =
-    PinListNode::new("grammeter/config");
-async fn task_2(list: &'static PinList<CriticalSectionRawMutex>) {
-    GRAMM_CONFIG.attach(list).await.unwrap();
-    let data: GrammeterConfig = GRAMM_CONFIG.load();
+static GRAMM_CONFIG: StorageListNode<GrammeterConfig> = StorageListNode::new("grammeter/config");
+async fn task_2(list: &'static StorageList<CriticalSectionRawMutex>) {
+    let config_handle = GRAMM_CONFIG.attach(list).await.unwrap();
+    let data: GrammeterConfig = config_handle.load();
     println!("T2 Got {data:?}");
     sleep(Duration::from_secs(3)).await;
-    GRAMM_CONFIG.write(&GrammeterConfig { radiation: 200.0 });
+    config_handle.write(&GrammeterConfig { radiation: 200.0 });
 }
 
 //
 // TASK 3: No config
 //
-#[derive(Debug, Encode, Decode, Clone)]
+#[derive(Debug, Encode, Decode, Clone, CborLen)]
 struct PositronConfig {
     #[n(0)]
     up: u8,
@@ -112,14 +111,14 @@ impl Default for PositronConfig {
     }
 }
 
-static POSITRON_CONFIG: PinListNode<PositronConfig, CriticalSectionRawMutex> =
-    PinListNode::new("positron/config");
-async fn task_3(list: &'static PinList<CriticalSectionRawMutex>) {
-    POSITRON_CONFIG.attach(list).await.unwrap();
-    let data: PositronConfig = POSITRON_CONFIG.load();
+static POSITRON_CONFIG: StorageListNode<PositronConfig> = StorageListNode::new("positron/config");
+
+async fn task_3(list: &'static StorageList<CriticalSectionRawMutex>) {
+    let config_handle = POSITRON_CONFIG.attach(list).await.unwrap();
+    let data: PositronConfig = config_handle.load();
     println!("T3 Got {data:?}");
     sleep(Duration::from_secs(5)).await;
-    POSITRON_CONFIG.write(&PositronConfig {
+    config_handle.write(&PositronConfig {
         up: 15,
         down: 25,
         strange: 108,
